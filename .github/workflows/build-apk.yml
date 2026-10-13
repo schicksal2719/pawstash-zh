@@ -1,0 +1,140 @@
+name: Build zh-CN APK
+
+# 云端构建内置简体中文的 Pawstash Android APK
+# 不需要本地 Rust / Android SDK / NDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'Upstream pawstash/pawstash ref (branch / tag / commit)'
+        required: true
+        default: 'main'
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build APK (zh-CN)
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) 拉上游源码
+      - name: Checkout upstream pawstash
+        uses: actions/checkout@v4
+        with:
+          repository: pawstash/pawstash
+          ref: ${{ github.event.inputs.upstream_ref || 'main' }}
+          path: .
+
+      # 2) 拉本仓库（中文语言包）
+      - name: Checkout language pack
+        uses: actions/checkout@v4
+        with:
+          path: langpack
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 3) 注入中文语言包（脚本内部会跑 i18n 键覆盖校验）
+      - name: Apply zh-CN language pack
+        run: bash langpack/apply-zh.sh .
+
+      # 4) 记录改动，便于排查
+      - name: Show applied changes
+        run: |
+          git status --short
+          echo "--- zh-CN.json keys ---"
+          node -e "const f=require('fs');const d=JSON.parse(f.readFileSync('src/lib/i18n/locales/zh-CN.json','utf8'));let n=0;const w=o=>{for(const k in o){typeof o[k]==='object'?w(o[k]):n++}};w(d);console.log(n)"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install NDK (r26b)
+        run: sdkmanager "ndk;26.1.10909125"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Initialize Android project
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then
+            pnpm tauri android init --ci --skip-targets-install
+          else
+            echo "src-tauri/gen/android 已存在，跳过 init"
+          fi
+
+      - name: Apply app icons to Android project
+        run: |
+          pnpm tauri icon src-tauri/icons/icon-manifest.json -o src-tauri/icons
+          cp -r src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/ || true
+
+      - name: Build APKs (universal + per-ABI)
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+        run: |
+          pnpm tauri android build --apk --target aarch64 --target armv7 --target x86_64
+          pnpm tauri android build --apk --split-per-abi --target aarch64 --target armv7 --target x86_64
+
+      - name: Sign APKs (debug keystore)
+        shell: bash
+        run: |
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+          mkdir -p "$HOME/.android"
+          DEBUG_KS="$HOME/.android/debug.keystore"
+          if [ ! -f "$DEBUG_KS" ]; then
+            keytool -genkey -v -keystore "$DEBUG_KS" -storepass android -alias androiddebugkey \
+              -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | while read -r apk; do
+            "$APKSIGNER" sign --ks "$DEBUG_KS" --ks-pass "pass:android" --key-pass "pass:android" "$apk" || true
+          done
+
+      - name: Collect APKs
+        shell: bash
+        run: |
+          mkdir -p dist-binaries
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | sort
+          find src-tauri/gen/android/app/build/outputs/apk \( -name "*arm64*.apk" -o -name "*v8a*.apk" \) | head -n 1 | xargs -I {} cp {} dist-binaries/Pawstash-arm64-zh.apk || true
+          find src-tauri/gen/android/app/build/outputs/apk \( -name "*armeabi*.apk" -o -name "*v7a*.apk" \) | head -n 1 | xargs -I {} cp {} dist-binaries/Pawstash-v7a-zh.apk || true
+          find src-tauri/gen/android/app/build/outputs/apk -name "*x86_64*.apk" | head -n 1 | xargs -I {} cp {} dist-binaries/Pawstash-x86_64-zh.apk || true
+          find src-tauri/gen/android/app/build/outputs/apk -name "*universal*.apk" | head -n 1 | xargs -I {} cp {} dist-binaries/Pawstash-universal-zh.apk || true
+          if [ ! -f dist-binaries/Pawstash-universal-zh.apk ] && [ -f dist-binaries/Pawstash-arm64-zh.apk ]; then
+            cp dist-binaries/Pawstash-arm64-zh.apk dist-binaries/Pawstash-universal-zh.apk
+          fi
+          ls -la dist-binaries
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pawstash-zh-apk
+          path: dist-binaries/*
+          if-no-files-found: error

@@ -1,0 +1,85 @@
+diff --git a/src/lib/components/settings/SettingsModal.svelte b/src/lib/components/settings/SettingsModal.svelte
+index 0303bd7..ebf054a 100644
+--- a/src/lib/components/settings/SettingsModal.svelte
++++ b/src/lib/components/settings/SettingsModal.svelte
+@@ -58,6 +58,7 @@
+   import IconTextFont from '~icons/fluent/text-font-24-regular';
+   import IconFlagUs from '~icons/circle-flags/us';
+   import IconFlagRu from '~icons/circle-flags/ru';
++  import IconFlagCn from '~icons/circle-flags/cn';
+   import IconCheck from '~icons/fluent/checkmark-24-regular';
+   import IconDismiss from '~icons/fluent/dismiss-24-regular';
+   import IconGrid from '~icons/fluent/grid-24-regular';
+@@ -1199,7 +1200,8 @@
+           <ChoiceGroup
+             options={[
+               { value: 'en', label: 'English', icon: IconFlagUs },
+-              { value: 'ru', label: 'Русский', icon: IconFlagRu }
++              { value: 'ru', label: 'Русский', icon: IconFlagRu },
++              { value: 'zh', label: '简体中文', icon: IconFlagCn }
+             ]}
+             value={i18n.currentLocale}
+             onchange={(val) => i18n.setLocale(val as any)}
+diff --git a/src/lib/i18n/i18nState.svelte.ts b/src/lib/i18n/i18nState.svelte.ts
+index 58e915e..622a35b 100644
+--- a/src/lib/i18n/i18nState.svelte.ts
++++ b/src/lib/i18n/i18nState.svelte.ts
+@@ -1,7 +1,8 @@
+ import ru from './locales/ru.json';
+ import en from './locales/en.json';
++import zh from './locales/zh-CN.json';
+ 
+-export type Locale = 'ru' | 'en';
++export type Locale = 'ru' | 'en' | 'zh';
+ 
+ export interface LocaleConfig {
+   code: Locale;
+@@ -12,11 +13,13 @@ export interface LocaleConfig {
+ export const LOCALES: LocaleConfig[] = [
+   { code: 'ru', name: 'Russian', nativeName: 'Русский' },
+   { code: 'en', name: 'English', nativeName: 'English' },
++  { code: 'zh', name: 'Chinese (Simplified)', nativeName: '简体中文' },
+ ];
+ 
+ const translations: Record<Locale, typeof ru> = {
+   ru,
+   en,
++  zh,
+ };
+ 
+ const STORAGE_KEY = 'pawstash_locale';
+@@ -33,6 +36,8 @@ export class I18nState {
+         const browserLang = navigator.language.split('-')[0];
+         if (browserLang === 'en') {
+           this.currentLocale = 'en';
++        } else if (browserLang === 'zh') {
++          this.currentLocale = 'zh';
+         } else {
+           this.currentLocale = 'ru';
+         }
+diff --git a/src/lib/i18n/locales/en.json b/src/lib/i18n/locales/en.json
+index c47eb5e..c72cca5 100644
+--- a/src/lib/i18n/locales/en.json
++++ b/src/lib/i18n/locales/en.json
+@@ -777,7 +777,7 @@
+     "inherits_global_proxy": "Global proxy",
+     "insert_variable": "Insert variable",
+     "language": "Interface Language",
+-    "language_desc": "Choose interface language (English / Russian).",
++    "language_desc": "Choose interface language (English / Русский / 简体中文).",
+     "layout_mode": "Interface Layout Mode",
+     "layout_mode_auto": "Auto (Responsive)",
+     "layout_mode_desc": "Force mobile layout, desktop layout, or auto detect based on screen width",
+diff --git a/src/lib/i18n/locales/ru.json b/src/lib/i18n/locales/ru.json
+index 1b198f8..9cff873 100644
+--- a/src/lib/i18n/locales/ru.json
++++ b/src/lib/i18n/locales/ru.json
+@@ -777,7 +777,7 @@
+     "inherits_global_proxy": "Глобальный прокси",
+     "insert_variable": "Вставить переменную",
+     "language": "Язык Интерфейса",
+-    "language_desc": "Выбор языка приложения (Русский / English).",
++    "language_desc": "Выбор языка приложения (Русский / English / 简体中文).",
+     "layout_mode": "Режим разметки интерфейса",
+     "layout_mode_auto": "Авто (Адаптивный)",
+     "layout_mode_desc": "Принудительный мобильный, десктопный или авторежим в зависимости от ширины экрана",
