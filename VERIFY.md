@@ -1,7 +1,7 @@
 # 校验记录（VERIFY）
 
 对象：上游 `pawstash/pawstash`（默认分支 `main`，克隆时 HEAD 见下）
-本机克隆路径：`C:\Users\14929\WorkBuddy AI\2026-10-13-21-12-45\pawstash`
+本机克隆路径：`<工作区>\pawstash`（Windows）
 
 ## 1. 上游基线
 
